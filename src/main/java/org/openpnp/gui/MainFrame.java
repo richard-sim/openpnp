@@ -109,12 +109,9 @@ public class MainFrame extends JFrame {
 	public static PackagesPanel packagesPanel;
 	public static FeedersPanel feedersPanel;
 	public static JobPanel jobPanel;
-	public static MachinePanel machinePanel;
 	public static CamerasPanel camerasPanel;
 	public static HeadsPanel headsPanel;
-	public static ActuatorsPanel actuatorsPanel;
 	public static CameraPanel cameraPanel;
-    public static NozzlesPanel nozzlesPanel;
     public static NozzleTipsPanel nozzleTipsPanel;
     public static MachineSetupPanel machineSetupPanel;
     public static NavigationView navView;
@@ -161,15 +158,13 @@ public class MainFrame extends JFrame {
 				prefs.getInt(PREF_WINDOW_Y, PREF_WINDOW_Y_DEF),
 				prefs.getInt(PREF_WINDOW_WIDTH, PREF_WINDOW_WIDTH_DEF),
 				prefs.getInt(PREF_WINDOW_HEIGHT, PREF_WINDOW_HEIGHT_DEF));
-		machinePanel = new MachinePanel();
+
 		jobPanel = new JobPanel(configuration, this, machineControlsPanel);
 		partsPanel = new PartsPanel(configuration, this);
 		packagesPanel = new PackagesPanel(configuration, this);
 		feedersPanel = new FeedersPanel(configuration, this);
 		camerasPanel = new CamerasPanel(this, configuration);
 		headsPanel = new HeadsPanel(this, configuration, machineControlsPanel);
-		actuatorsPanel = new ActuatorsPanel(configuration);
-        nozzlesPanel = new NozzlesPanel(this, configuration);
         machineSetupPanel = new MachineSetupPanel();
         nozzleTipsPanel = new NozzleTipsPanel();
         navView = new NavigationView();
@@ -241,6 +236,8 @@ public class MainFrame extends JFrame {
 			menuItem.setSelected(true);
 		}
 		mnUnits.add(menuItem);
+		
+		mnView.add(machineControlsPanel.showHideJogControlsWindowAction);
 
 		// Job Control
 		//////////////////////////////////////////////////////////////////////
@@ -439,10 +436,7 @@ public class MainFrame extends JFrame {
 		panelBottom.addTab("Packages", null, packagesPanel, null);
 		panelBottom.addTab("Feeders", null, feedersPanel, null);
 		panelBottom.addTab("Cameras", null, camerasPanel, null);
-		panelBottom.addTab("Machine", null, machinePanel, null);
 		panelBottom.addTab("Heads", null, headsPanel, null);
-        panelBottom.addTab("Actuators", null, actuatorsPanel, null);
-        panelBottom.addTab("Nozzles", null, nozzlesPanel, null);
         panelBottom.addTab("Nozzle Tips", null, nozzleTipsPanel, null);
         panelBottom.addTab("Machine Setup", null, machineSetupPanel, null);
 

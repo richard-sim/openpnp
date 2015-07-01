@@ -35,9 +35,11 @@ import org.openpnp.machine.reference.camera.LtiCivilCamera;
 import org.openpnp.machine.reference.camera.OpenCvCamera;
 import org.openpnp.machine.reference.camera.TableScannerCamera;
 import org.openpnp.machine.reference.camera.VfwCamera;
+import org.openpnp.machine.reference.driver.NullDriver;
 import org.openpnp.machine.reference.feeder.ReferenceTapeFeeder;
 import org.openpnp.machine.reference.feeder.ReferenceTrayFeeder;
 import org.openpnp.machine.reference.feeder.ReferenceTubeFeeder;
+import org.openpnp.machine.reference.wizards.ReferenceMachineConfigurationWizard;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Feeder;
 import org.openpnp.spi.PropertySheetHolder;
@@ -50,13 +52,21 @@ import org.slf4j.LoggerFactory;
 public class ReferenceMachine extends AbstractMachine {
 	private static Logger logger = LoggerFactory.getLogger(ReferenceMachine.class);
 
-	@Element
-	private ReferenceDriver driver;
+	@Element(required=false)
+	private ReferenceDriver driver = new NullDriver();
 	
 	private boolean enabled;
 	
 	public ReferenceDriver getDriver() {
 		return driver;
+	}
+	
+	public void setDriver(ReferenceDriver driver) throws Exception {
+	    if (driver != this.driver) {
+	        setEnabled(false);
+	        close();
+	    }
+	    this.driver = driver;
 	}
 
 	@Override
@@ -93,7 +103,7 @@ public class ReferenceMachine extends AbstractMachine {
 
 	@Override
 	public Wizard getConfigurationWizard() {
-		return driver.getConfigurationWizard();
+	    return new ReferenceMachineConfigurationWizard(this);
 	}
 	
 	@Override
