@@ -6,12 +6,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.TimeoutException;
 
+import javax.swing.Icon;
+
 import jssc.SerialPort;
 import jssc.SerialPortException;
 import jssc.SerialPortList;
 import jssc.SerialPortTimeoutException;
 
 import org.openpnp.machine.reference.ReferenceDriver;
+import org.openpnp.machine.reference.ReferencePasteDispenser;
+import org.openpnp.model.Location;
 import org.simpleframework.xml.Attribute;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +60,14 @@ public abstract class AbstractSerialPortDriver implements ReferenceDriver, Close
         }
     }
     
+    @Override
+    public void dispense(ReferencePasteDispenser dispenser,
+            Location startLocation, Location endLocation,
+            long dispenseTimeMilliseconds) throws Exception {
+        // Do nothing. This is just stubbed in so that it can be released
+        // without breaking every driver in the wild.
+    }
+
     public String[] getPortNames() {
         return SerialPortList.getPortNames();
     }
@@ -120,7 +132,12 @@ public abstract class AbstractSerialPortDriver implements ReferenceDriver, Close
     public void setBaud(int baud) {
         this.baud = baud;
     }
-    
+
+    @Override
+    public Icon getPropertySheetHolderIcon() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 
     /**
      * SerialInputStream and SerialOutputStream are from the pull request

@@ -57,7 +57,9 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             public void configurationComplete(Configuration configuration)
                     throws Exception {
                 configuration.getMachine().addListener(NavigationView.this);
-                configuration.getMachine().getJobProcessor().addListener(NavigationView.this);
+                for (JobProcessor jobProcessor : configuration.getMachine().getJobProcessors().values()) {
+                    jobProcessor.addListener(NavigationView.this);
+                }
             }
         });
     }
@@ -122,7 +124,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         g2d.fillRect(0, 0, (int) machineExtents.getX(), (int) machineExtents.getY());
         
         Machine machine = Configuration.get().getMachine();
-        JobProcessor jobProcessor = machine.getJobProcessor();
+        JobProcessor jobProcessor = MainFrame.jobPanel.getJobProcessor();
         Job job = jobProcessor.getJob();
         if (job != null) {
             // draw the boards

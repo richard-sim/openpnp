@@ -3,6 +3,7 @@ package org.openpnp.machine.reference.driver.test;
 import java.io.IOException;
 
 import javax.swing.Action;
+import javax.swing.Icon;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceActuator;
@@ -10,6 +11,7 @@ import org.openpnp.machine.reference.ReferenceDriver;
 import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceHeadMountable;
 import org.openpnp.machine.reference.ReferenceNozzle;
+import org.openpnp.machine.reference.ReferencePasteDispenser;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.PropertySheetHolder;
@@ -103,6 +105,12 @@ public class TestDriver implements ReferenceDriver {
         logger.debug("actuate({}, {})", actuator, value);
         delegate.actuate(actuator, value);
     }
+    
+    @Override
+    public void dispense(ReferencePasteDispenser dispenser,
+            Location startLocation, Location endLocation,
+            long dispenseTimeMilliseconds) throws Exception {
+    }
 
     @Override
     public void setEnabled(boolean enabled) throws Exception {
@@ -162,6 +170,14 @@ public class TestDriver implements ReferenceDriver {
             // TODO Auto-generated method stub
             
         }
+        
+        @Override
+        public void dispense(ReferencePasteDispenser dispenser,
+                Location startLocation, Location endLocation,
+                long dispenseTimeMilliseconds) throws Exception {
+            // TODO Auto-generated method stub
+            
+        }
 
         @Override
         public void setEnabled(boolean enabled) throws Exception {
@@ -189,6 +205,12 @@ public class TestDriver implements ReferenceDriver {
 
         @Override
         public Action[] getPropertySheetHolderActions() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Icon getPropertySheetHolderIcon() {
             // TODO Auto-generated method stub
             return null;
         }
@@ -224,6 +246,12 @@ public class TestDriver implements ReferenceDriver {
         return null;
     }
 
+    @Override
+    public Icon getPropertySheetHolderIcon() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+    
     @Override
     public void close() throws IOException {
         // TODO Auto-generated method stub

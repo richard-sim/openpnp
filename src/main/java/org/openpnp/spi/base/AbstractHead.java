@@ -3,12 +3,15 @@ package org.openpnp.spi.base;
 import java.util.Collections;
 import java.util.List;
 
+import javax.swing.Icon;
+
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.Actuator;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.Machine;
 import org.openpnp.spi.Nozzle;
+import org.openpnp.spi.PasteDispenser;
 import org.openpnp.util.IdentifiableList;
 import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.ElementList;
@@ -32,6 +35,9 @@ public abstract class AbstractHead implements Head {
     @ElementList(required=false)
     protected IdentifiableList<Camera> cameras = new IdentifiableList<Camera>();
     
+    @ElementList(required=false)
+    protected IdentifiableList<PasteDispenser> pasteDispensers = new IdentifiableList<PasteDispenser>();
+    
     public AbstractHead() {
         this.id = Configuration.createId();
         this.name = getClass().getSimpleName();
@@ -48,6 +54,9 @@ public abstract class AbstractHead implements Head {
         }
         for (Actuator actuator : actuators) {
             actuator.setHead(this);
+        }
+        for (PasteDispenser pasteDispenser : pasteDispensers) {
+            pasteDispenser.setHead(this);
         }
     }
     
@@ -117,6 +126,9 @@ public abstract class AbstractHead implements Head {
         for (Actuator actuator : actuators) {
             actuator.moveToSafeZ(speed);
         }
+        for (PasteDispenser dispenser : pasteDispensers) {
+            dispenser.moveToSafeZ(speed);
+        }
     }
     
     @Override
@@ -127,5 +139,21 @@ public abstract class AbstractHead implements Head {
     @Override
     public void setName(String name) {
         this.name = name;
-    }    
+    }   
+    
+    @Override
+    public List<PasteDispenser> getPasteDispensers() {
+        return Collections.unmodifiableList(pasteDispensers);
+    }
+
+    @Override
+    public PasteDispenser getPasteDispenser(String id) {
+        return pasteDispensers.get(id);
+    }
+
+    @Override
+    public Icon getPropertySheetHolderIcon() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

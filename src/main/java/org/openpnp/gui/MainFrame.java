@@ -68,8 +68,11 @@ import org.openpnp.JobProcessorListener;
 import org.openpnp.gui.components.CameraPanel;
 import org.openpnp.gui.components.NavigationView;
 import org.openpnp.gui.importer.BoardImporter;
+import org.openpnp.gui.importer.EagleBoardImporter;
 import org.openpnp.gui.importer.EagleMountsmdUlpImporter;
 import org.openpnp.gui.importer.KicadPosImporter;
+import org.openpnp.gui.importer.NamedCSVImporter;
+import org.openpnp.gui.importer.SolderPasteGerberImporter;
 import org.openpnp.gui.support.HeadCellValue;
 import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.MessageBoxes;
@@ -78,6 +81,7 @@ import org.openpnp.model.Configuration;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Head;
+import org.openpnp.spi.JobProcessor;
 
 /**
  * The main window of the application.
@@ -104,15 +108,14 @@ public class MainFrame extends JFrame {
 
 	// TODO: Really should switch to some kind of DI model, but this will do
 	// for now.
+	public static MainFrame mainFrame;
 	public static MachineControlsPanel machineControlsPanel;
 	public static PartsPanel partsPanel;
 	public static PackagesPanel packagesPanel;
 	public static FeedersPanel feedersPanel;
 	public static JobPanel jobPanel;
 	public static CamerasPanel camerasPanel;
-	public static HeadsPanel headsPanel;
 	public static CameraPanel cameraPanel;
-    public static NozzleTipsPanel nozzleTipsPanel;
     public static MachineSetupPanel machineSetupPanel;
     public static NavigationView navView;
 
@@ -130,6 +133,7 @@ public class MainFrame extends JFrame {
 	private JMenu mnImport;
 
 	public MainFrame(Configuration configuration) {
+	    mainFrame = this;
 		this.configuration = configuration;
 		LengthCellValue.setConfiguration(configuration);
 		HeadCellValue.setConfiguration(configuration);
@@ -164,9 +168,7 @@ public class MainFrame extends JFrame {
 		packagesPanel = new PackagesPanel(configuration, this);
 		feedersPanel = new FeedersPanel(configuration, this);
 		camerasPanel = new CamerasPanel(this, configuration);
-		headsPanel = new HeadsPanel(this, configuration, machineControlsPanel);
         machineSetupPanel = new MachineSetupPanel();
-        nozzleTipsPanel = new NozzleTipsPanel();
         navView = new NavigationView();
         cameraPanel = new CameraPanel();
         machineControlsPanel = new MachineControlsPanel(configuration, this,
@@ -436,8 +438,6 @@ public class MainFrame extends JFrame {
 		panelBottom.addTab("Packages", null, packagesPanel, null);
 		panelBottom.addTab("Feeders", null, feedersPanel, null);
 		panelBottom.addTab("Cameras", null, camerasPanel, null);
-		panelBottom.addTab("Heads", null, headsPanel, null);
-        panelBottom.addTab("Nozzle Tips", null, nozzleTipsPanel, null);
         panelBottom.addTab("Machine Setup", null, machineSetupPanel, null);
 
 		registerBoardImporters();
@@ -462,27 +462,32 @@ public class MainFrame extends JFrame {
 			System.exit(1);
 		}
 
-		for (Camera camera : configuration.getMachine().getCameras()) {
-			cameraPanel.addCamera(camera);
-		}
         for (Head head : Configuration.get().getMachine().getHeads()) {
             for (Camera camera : head.getCameras()) {
                 cameraPanel.addCamera(camera);
             }
+        }
+        for (Camera camera : configuration.getMachine().getCameras()) {
+            cameraPanel.addCamera(camera);
         }
 
 		configuration.addListener(new ConfigurationListener.Adapter() {
 		    @Override
             public void configurationComplete(Configuration configuration)
                     throws Exception {
-		        configuration.getMachine().getJobProcessor().addListener(jobProcessorListener);
+		        for (JobProcessor jobProcessor : configuration.getMachine().getJobProcessors().values()) {
+	                jobProcessor.addListener(jobProcessorListener);
+		        }
             }
 		});
 	}
 	
 	private void registerBoardImporters() {
+        registerBoardImporter(EagleBoardImporter.class);
         registerBoardImporter(EagleMountsmdUlpImporter.class);
         registerBoardImporter(KicadPosImporter.class);
+        registerBoardImporter(NamedCSVImporter.class);
+        registerBoardImporter(SolderPasteGerberImporter.class);
 	}
 	
     /**

@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.Locale;
 
 import javax.swing.Action;
+import javax.swing.Icon;
 
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
@@ -37,6 +38,7 @@ import org.openpnp.machine.reference.ReferenceDriver;
 import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceHeadMountable;
 import org.openpnp.machine.reference.ReferenceNozzle;
+import org.openpnp.machine.reference.ReferencePasteDispenser;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Head;
@@ -196,6 +198,12 @@ public class SimulatorDriver implements ReferenceDriver {
             Thread.sleep(500);
         }
     }
+    
+    @Override
+    public void dispense(ReferencePasteDispenser dispenser,
+            Location startLocation, Location endLocation,
+            long dispenseTimeMilliseconds) throws Exception {
+    }
 
     @Override
     public void setEnabled(boolean enabled) throws Exception {
@@ -268,6 +276,12 @@ public class SimulatorDriver implements ReferenceDriver {
     
     @Override
     public Action[] getPropertySheetHolderActions() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Icon getPropertySheetHolderIcon() {
         // TODO Auto-generated method stub
         return null;
     }

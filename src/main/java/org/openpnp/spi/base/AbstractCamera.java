@@ -1,15 +1,15 @@
 package org.openpnp.spi.base;
 
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import javax.swing.Icon;
+
 import org.openpnp.CameraListener;
 import org.openpnp.ConfigurationListener;
+import org.openpnp.gui.support.Icons;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -38,6 +38,10 @@ public abstract class AbstractCamera implements Camera {
     protected Set<ListenerEntry> listeners = Collections.synchronizedSet(new HashSet<ListenerEntry>());
     
     protected Head head;
+    
+    protected Integer width;
+    
+    protected Integer height;
     
     public AbstractCamera() {
         this.id = Configuration.createId();
@@ -128,6 +132,31 @@ public abstract class AbstractCamera implements Camera {
         }
     }
     
+    @Override
+    public int getWidth() {
+        if (width == null) {
+            BufferedImage image = capture();
+            width = image.getWidth();
+            height = image.getHeight();
+        }
+        return width;
+    }
+
+    @Override
+    public int getHeight() {
+        if (width == null) {
+            BufferedImage image = capture();
+            width = image.getWidth();
+            height = image.getHeight();
+        }
+        return height;
+    }
+    
+    @Override
+    public Icon getPropertySheetHolderIcon() {
+        return Icons.captureCamera;
+    }
+
     protected class ListenerEntry {
         public CameraListener listener;
         public int maximumFps;

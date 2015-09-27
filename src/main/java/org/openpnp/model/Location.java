@@ -104,6 +104,10 @@ public class Location {
 		return (Math.sqrt(Math.pow(this.x - x, 2) + Math.pow(this.y - y, 2)));
 	}
 	
+	public double getXyzDistanceTo(Location location) {
+		return (Math.sqrt(Math.pow(this.x - location.getX(), 2) + Math.pow(this.y - location.getY(), 2) + Math.pow(this.z - location.getZ(), 2)) );
+	}
+	
 	public Length getLengthX() {
 		return new Length(x, units);
 	}
@@ -129,6 +133,16 @@ public class Location {
 	}
 	
 	/**
+	 * Same as {@link Location#subtract(Location)} but also subtracts rotation.
+	 * @param l
+	 * @return
+	 */
+	public Location subtractWithRotation(Location l) {
+        l = l.convertToUnits(getUnits());
+        return new Location(l.getUnits(), x - l.getX(), y - l.getY(), z - l.getZ(), rotation - l.getRotation());
+	}
+	
+	/**
 	 * Returns a new Location with the given Location's X, Y, and Z components
 	 * added to this Location's X, Y, and Z components. Rotation is left
 	 * unchanged.
@@ -140,6 +154,18 @@ public class Location {
 		return new Location(l.getUnits(), x + l.getX(), y + l.getY(), z + l.getZ(), rotation);
 	}
 
+    /**
+     * Returns a new Location with the given Location's X, Y, and Z components
+     * added to this Location's X, Y, and Z components. Rotation is left
+     * unchanged.
+     * @param l
+     * @return
+     */
+    public Location addWithRotation(Location l) {
+        l = l.convertToUnits(getUnits());
+        return new Location(l.getUnits(), x + l.getX(), y + l.getY(), z + l.getZ(), rotation + l.getRotation());
+    }
+    
 	/**
 	 * Returns a new Location with the given Location's X, Y and Z components
 	 * multiplied by this Location's X, Y and Z components. Rotation is left
