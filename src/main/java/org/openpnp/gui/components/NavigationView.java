@@ -3,11 +3,12 @@ package org.openpnp.gui.components;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Insets;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Point2D;
 
 import javax.swing.JComponent;
 
@@ -37,11 +38,19 @@ import org.openpnp.util.Utils2D;
 public class NavigationView extends JComponent implements JobProcessorListener, MachineListener, MouseWheelListener, MouseListener {
     // we need min and max so that we have limits, think of camera trying to go
     // to 0 on this machine. crashes.
-    // TODO: Don't forget conversion when this is coming from it's real source.
-    // If we use this as the base units we can just convert everything else to it.
-    Location machineExtents = new Location(LengthUnit.Millimeters, 430, 410, 0, 0);
-    double zoomScale = 1;
-    double offsetX = -machineExtents.getX() / 2, offsetY = -machineExtents.getY() / 2;
+    
+    // MUST always be in mm, if something sets it it should be converted first.
+    private Location machineExtents = new Location(LengthUnit.Millimeters, 430, 410, 0, 0);
+    
+    // MUST always be in mm, if something sets it it should be converted first.
+    private Location lookingAt = machineExtents.multiply(0.5, 0.5, 1, 1).derive(null, null, 1.0, null);
+    
+    /**
+     * Contains the AffineTransform that was last used to render the component.
+     * This is used elsewhere to convert component coordinates back to machine
+     * coordinates.
+     */
+    private AffineTransform transform;
     
     public NavigationView() {
         setBackground(Color.black);
@@ -64,62 +73,50 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         });
     }
     
-    /**
-     * Rendering tasks:
-     * bed
-     * boardlocations / boards
-     * placements
-     * feeders
-     * head
-     * 
-     * Do we want continuous zoom? Or just overview and focus?
-     * For the latter, if the user has a large bed and small window the objects could be quite small.
-     * Does that mean we need scrolling? I think we definitely do not want scrolling
-     * Let's say we have a window 1280x720 to work with (mine is 1700x1200), that means a mm for my
-     * bed would only be 2.9 pixels. An 8mm tape would only be 23 mm wide
-     * Maybe in the overview we need contnuous scroll (no object selected) but when you select an object we
-     * zoom in on it and lock the zoom? Or maybe we zoom in and you can still zoom out if you want. Why not?
-     * 
-     * 
-     */
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2d = (Graphics2D) g;
-        Insets ins = getInsets();
-        int width = getWidth() - ins.left - ins.right;
-        int height = getHeight() - ins.top - ins.bottom;
-        // cancel out the insets
-        g2d.translate(ins.left, ins.top);
-        g2d.setClip(0, 0, width, height);
+    private void updateTransform() {
+        AffineTransform transform = new AffineTransform();
         
-        // fill the background
-        g2d.setColor(getBackground());
-        g2d.fillRect(0, 0, width, height);
+        int width = getWidth();
+        int height = getHeight();
         
-        // add a small border just to make things look nice
-        int borderSize = 8;
-        width -= borderSize * 2;
-        height -= borderSize * 2;
-        g2d.translate(borderSize, borderSize);
-        g2d.setClip(0, 0, width, height);
+        // Center the drawing
+        transform.translate(width / 2,  height / 2);
         
-        // center the drawing
-        g2d.translate(width / 2,  height / 2);
-        
-        // determine the base scale which will fit the entire bed in the window
+        // Determine the base scale. This is the scaling factor needed to fit
+        // the entire machine in the window.
         double bedWidth = machineExtents.getX();
         double bedHeight = machineExtents.getY();
         double xScale = width / bedWidth;
         double yScale = height / bedHeight;
         double baseScale = Math.min(xScale, yScale);
-
-        // scale the drawing to the final size.
-        g2d.scale(baseScale * zoomScale, baseScale * zoomScale);
-
-        g2d.translate(offsetX, offsetY);
+        double scale = baseScale * lookingAt.getZ();
+        // Scale the drawing by the baseScale times the zoomed scale
+        transform.scale(scale, scale);
+        // Move to the lookingAt position
+        transform.translate(-lookingAt.getX(), lookingAt.getY());
+        // Flip the drawing in Y so that our coordinate system matches that
+        // of the machine.
+        transform.scale(1,  -1);
         
-        // draw the bed
+        this.transform = transform;
+    }
+    
+    @Override
+    protected void paintComponent(Graphics g) {
+        // Create a new Graphics so we don't break the original.
+        Graphics2D g2d = (Graphics2D) g.create();
+        
+        // Paint the background
+        g2d.setColor(getBackground());
+        g2d.fillRect(0, 0, getWidth(), getHeight());
+        
+        // All rendering is done in mm, where 1mm = 1px. Any Locations that
+        // are used for rendering must first be converted to mm.
+        
+        updateTransform();
+        g2d.transform(transform);
+        
+        // Draw the bed
         g2d.setColor(Color.lightGray);
         g2d.fillRect(0, 0, (int) machineExtents.getX(), (int) machineExtents.getY());
         
@@ -127,11 +124,11 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         JobProcessor jobProcessor = MainFrame.jobPanel.getJobProcessor();
         Job job = jobProcessor.getJob();
         if (job != null) {
-            // draw the boards
+            // Draw the boards
             for (BoardLocation boardLocation : job.getBoardLocations()) {
                 Location location = boardLocation.getLocation();
                 paintCrosshair(g2d, location, Color.green);
-                // draw the placements on the boards
+                // Draw the placements on the boards
                 for (Placement placement : boardLocation.getBoard().getPlacements()) {
                     if (placement.getSide() != boardLocation.getSide()) {
                         continue;
@@ -142,7 +139,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             }
         }
         
-        // draw the feeders
+        // Draw the feeders
         for (Feeder feeder : machine.getFeeders()) {
             try {
                 Location location = feeder.getPickLocation();
@@ -153,13 +150,13 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             }
         }
         
-        // draw fixed cameras
+        // Draw fixed cameras
         for (Camera camera : machine.getCameras()) {
             Location location = camera.getLocation();
             paintCrosshair(g2d, location, Color.cyan);
         }
          
-        // draw the head
+        // Draw the head
         for (Head head : machine.getHeads()) {
             for (Nozzle nozzle : head.getNozzles()) {
                 Location location = nozzle.getLocation();
@@ -169,6 +166,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             for (Camera camera : head.getCameras()) {
                 Location location = camera.getLocation();
                 paintCrosshair(g2d, location, Color.blue);
+                // TODO: Draw camera image, properly scaled.
             }
             
             for (Actuator actuator : head.getActuators()) {
@@ -176,15 +174,112 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
                 paintCrosshair(g2d, location, Color.yellow);
             }
         }
+        
+        // Dispose of the Graphics we created.
+        g2d.dispose();
     }
     
     private void paintCrosshair(Graphics2D g2d, Location location, Color color) {
-        int height = (int) machineExtents.getY();
+        location = location.convertToUnits(LengthUnit.Millimeters);
         g2d.setColor(color);
         int x = (int) location.getX();
         int y = (int) location.getY();
-        g2d.drawLine(x - 3, height - y, x + 3, height - y);
-        g2d.drawLine(x, height - y - 3, x, height - y + 3);
+        g2d.drawLine(x - 3, y, x + 3, y);
+        g2d.drawLine(x, y - 3, x, y + 3);
+    }
+    
+    private Location getPixelLocation(double x, double y) {
+        Point2D point = new Point2D.Double(x, y);
+        try {
+            transform.inverseTransform(point, point);
+        }
+        catch (Exception e) {
+        }
+        return lookingAt.derive(point.getX(), point.getY(), null, null);
+    }
+
+    @Override
+    public void mouseWheelMoved(MouseWheelEvent e) {
+        double minimumScale = 0.1;
+        double scaleIncrement = 0.01;
+        
+        double scale = lookingAt.getZ();
+        scale += -e.getWheelRotation() * scaleIncrement;
+        
+        // limit the scale to 10% so that it doesn't just turn into a dot
+        scale = Math.max(scale, minimumScale);
+        
+        // Get the offsets from lookingAt to where the mouse was when the
+        // scroll event happened
+        Location location1 = getPixelLocation(e.getX(), e.getY());
+        
+        // Update the scale
+        lookingAt = lookingAt.derive(null, null, scale, null);
+        
+        // And the transform
+        updateTransform();
+
+        // Get the newly scaled location
+        Location location2 = getPixelLocation(e.getX(), e.getY());
+
+        // Get the delta between the two locations.
+        Location delta = location2.subtract(location1);
+        
+        // Reset Z and C since we don't want to mess with them
+        delta = delta.derive(null, null, 0.0, 0.0);
+        
+        // And offset lookingAt by the delta
+        lookingAt = lookingAt.subtract(delta);
+        
+        // If the user hit the minimum scale, center the table.
+        // This helps them find it if it gets lost.
+        if (scale == minimumScale) {
+            lookingAt = machineExtents
+                    .multiply(0.5, 0.5, 1, 1)
+                    .derive(null, null, minimumScale, null);
+        }
+        
+        // Repaint will update the transform and we're ready to go.
+        repaint();
+    }
+    
+    @Override
+    public void mouseClicked(MouseEvent e) {
+        final Camera camera = Configuration.get().getMachine().getHeads().get(0).getCameras().get(0);
+        Location clickLocation = getPixelLocation(e.getX(), e.getY())
+                .convertToUnits(camera.getLocation().getUnits());
+        final Location location = camera.getLocation().derive(
+                clickLocation.getX(), 
+                clickLocation.getY(), 
+                null, 
+                null);
+        MainFrame.machineControlsPanel.submitMachineTask(new Runnable() {
+            public void run() {
+                try {
+                    MovableUtils.moveToLocationAtSafeZ(camera, location, 1.0);
+                }
+                catch (Exception e) {
+                    MessageBoxes.errorBox(getTopLevelAncestor(),
+                            "Move Error", e);
+                }
+            }
+        });
+    }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseEntered(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseExited(MouseEvent e) {
     }
     
     @Override
@@ -194,14 +289,10 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
 
     @Override
     public void jobStateChanged(JobState state) {
-        // TODO Auto-generated method stub
-        
     }
 
     @Override
     public void jobEncounteredError(JobError error, String description) {
-        // TODO Auto-generated method stub
-        
     }
 
     @Override
@@ -243,55 +334,5 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
 
     @Override
     public void machineDisableFailed(Machine machine, String reason) {
-    }
-
-    @Override
-    public void mouseWheelMoved(MouseWheelEvent e) {
-        zoomScale += -e.getWheelRotation() * 0.01;
-        zoomScale = Math.max(zoomScale, 1);
-        // when we change the zoom we want the position under the mouse cursor
-        // to remain the same. this means we need to know the unscaled position
-        // under the cursor, the scaled position and the difference in offsets
-        // we should have functions that get the current mouse position in
-        // machine coordinates and calculate the offset for same
-//        offsetX += -e.getWheelRotation() * 0.01;
-//        offsetY += -e.getWheelRotation() * 0.01;
-        repaint();
-    }
-
-    @Override
-    public void mouseClicked(MouseEvent e) {
-        int x = e.getX();
-        int y = e.getY();
-        final Camera camera = Configuration.get().getMachine().getHeads().get(0).getCameras().get(0);
-        final Location location = new Location(LengthUnit.Millimeters,  x / zoomScale, machineExtents.getY() - (y / zoomScale), Double.NaN, Double.NaN);
-        
-        MainFrame.machineControlsPanel.submitMachineTask(new Runnable() {
-            public void run() {
-                try {
-                    MovableUtils.moveToLocationAtSafeZ(camera, location, 1.0);
-                }
-                catch (Exception e) {
-                    MessageBoxes.errorBox(getTopLevelAncestor(),
-                            "Move Error", e);
-                }
-            }
-        });
-    }
-
-    @Override
-    public void mousePressed(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseReleased(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseEntered(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseExited(MouseEvent e) {
     }
 }
