@@ -9,9 +9,12 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
+import java.util.HashMap;
 
 import javax.swing.JComponent;
 
+import org.openpnp.CameraListener;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.JobProcessorListener;
 import org.openpnp.gui.MainFrame;
@@ -51,6 +54,8 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
      * coordinates.
      */
     private AffineTransform transform;
+
+    private HashMap<Camera, BufferedImage> cameraImages = new HashMap<>();
     
     public NavigationView() {
         setBackground(Color.black);
@@ -65,9 +70,26 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             @Override
             public void configurationComplete(Configuration configuration)
                     throws Exception {
-                configuration.getMachine().addListener(NavigationView.this);
-                for (JobProcessor jobProcessor : configuration.getMachine().getJobProcessors().values()) {
+                Machine machine = configuration.getMachine();
+                machine.addListener(NavigationView.this);
+                // TODO: This doesn't really work in the new JobProcessor world
+                // because the JobProcessor gets swapped out when changing tabs.
+                // Need to figure out how to reference the current one and
+                // maintain listeners across switches.
+                for (JobProcessor jobProcessor : machine.getJobProcessors().values()) {
                     jobProcessor.addListener(NavigationView.this);
+                }
+                for (Camera camera : machine.getCameras()) {
+                    camera.startContinuousCapture(
+                            new NavCameraListener(camera), 
+                            24);
+                }
+                for (Head head : machine.getHeads()) {
+                    for (Camera camera : head.getCameras()) {
+                        camera.startContinuousCapture(
+                                new NavCameraListener(camera), 
+                                24);
+                    }
                 }
             }
         });
@@ -160,18 +182,49 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         for (Head head : machine.getHeads()) {
             for (Nozzle nozzle : head.getNozzles()) {
                 Location location = nozzle.getLocation();
-                paintCrosshair(g2d, location, Color.red);
+//                paintCrosshair(g2d, location, Color.red);
             }
             
             for (Camera camera : head.getCameras()) {
                 Location location = camera.getLocation();
-                paintCrosshair(g2d, location, Color.blue);
-                // TODO: Draw camera image, properly scaled.
+                location = location.convertToUnits(LengthUnit.Millimeters);
+//                paintCrosshair(g2d, location, Color.blue);
+                BufferedImage img = cameraImages.get(camera);
+                if (img != null) {
+                    // we need to scale the image so that 1 pixel = 1mm
+                    // and it needs to be centered on the location
+                    double width = camera.getWidth();
+                    double height = camera.getHeight();
+                    Location upp = camera.getUnitsPerPixel().convertToUnits(LengthUnit.Millimeters);
+                    double scaledWidth = width * upp.getX();
+                    double scaledHeight = height * upp.getY();
+
+                    int dx1 = (int) (location.getX() - (scaledWidth / 2));
+                    int dy1 = (int) (location.getY() - (scaledHeight / 2));
+                    int dx2 = (int) (location.getX() + (scaledWidth / 2));
+                    int dy2 = (int) (location.getY() + (scaledHeight / 2));
+                    
+                    int sx1 = 0;
+                    int sy1 = 0;
+                    int sx2 = (int) width;
+                    int sy2 = (int) height;
+                    g2d.drawImage(
+                            img,
+                            dx1,
+                            dy1,
+                            dx2,
+                            dy2,
+                            sx1,
+                            sy1,
+                            sx2,
+                            sy2,
+                            null);
+                }
             }
             
             for (Actuator actuator : head.getActuators()) {
                 Location location = actuator.getLocation();
-                paintCrosshair(g2d, location, Color.yellow);
+//                paintCrosshair(g2d, location, Color.yellow);
             }
         }
         
@@ -204,7 +257,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         double scaleIncrement = 0.01;
         
         double scale = lookingAt.getZ();
-        scale += -e.getWheelRotation() * scaleIncrement;
+        scale += -e.getWheelRotation() * scale * scaleIncrement;
         
         // limit the scale to 10% so that it doesn't just turn into a dot
         scale = Math.max(scale, minimumScale);
@@ -334,5 +387,19 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
 
     @Override
     public void machineDisableFailed(Machine machine, String reason) {
+    }
+    
+    class NavCameraListener implements CameraListener {
+        private final Camera camera;
+        
+        public NavCameraListener(Camera camera) {
+            this.camera = camera;
+        }
+
+        @Override
+        public void frameReceived(BufferedImage img) {
+            cameraImages.put(camera, img);
+            repaint();
+        }
     }
 }
