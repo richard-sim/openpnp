@@ -21,6 +21,7 @@
 
 package org.openpnp.machine.reference.camera;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeSupport;
@@ -132,6 +133,8 @@ public class ImageCamera extends ReferenceCamera implements Runnable {
                 BufferedImage.TYPE_INT_ARGB);
 
         Graphics gFrame = frame.getGraphics();
+        gFrame.setColor(Color.black);
+        gFrame.fillRect(0, 0, width, height);
         
         Location location = getLocation();
         double locationX = location.getX();

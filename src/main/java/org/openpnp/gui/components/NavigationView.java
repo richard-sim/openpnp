@@ -1,8 +1,13 @@
 package org.openpnp.gui.components;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
@@ -36,9 +41,13 @@ import org.openpnp.spi.Machine;
 import org.openpnp.spi.MachineListener;
 import org.openpnp.spi.Nozzle;
 import org.openpnp.util.MovableUtils;
+import org.openpnp.util.OpenCvUtils;
 import org.openpnp.util.Utils2D;
 
-public class NavigationView extends JComponent implements JobProcessorListener, MachineListener, MouseWheelListener, MouseListener {
+public class NavigationView 
+    extends JComponent 
+    implements JobProcessorListener, MachineListener, MouseWheelListener, 
+        MouseListener, KeyListener {
     // we need min and max so that we have limits, think of camera trying to go
     // to 0 on this machine. crashes.
     
@@ -47,6 +56,21 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
     
     // MUST always be in mm, if something sets it it should be converted first.
     private Location lookingAt = machineExtents.multiply(0.5, 0.5, 1, 1).derive(null, null, 1.0, null);
+    
+    // Determine the base scale. This is the scaling factor needed to fit
+    // the entire machine in the window.
+    // TODO: It would simplify things if we just calculate this once and
+    // set it as Z on lookingAt during startup. There's no reason to
+    // recalculate it every time since we only actually set it once.
+//    double bedWidth = machineExtents.getX();
+//    double bedHeight = machineExtents.getY();
+//    double xScale = width / bedWidth;
+//    double yScale = height / bedHeight;
+//    double baseScale = Math.min(xScale, yScale);
+//    double scale = baseScale * lookingAt.getZ();
+    
+    private boolean dimCameras = false;
+    
     
     /**
      * Contains the AffineTransform that was last used to render the component.
@@ -61,6 +85,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         setBackground(Color.black);
         addMouseWheelListener(this);
         addMouseListener(this);
+        addKeyListener(this);
         Configuration.get().addListener(new ConfigurationListener() {
             @Override
             public void configurationLoaded(Configuration configuration)
@@ -103,19 +128,13 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         
         // Center the drawing
         transform.translate(width / 2,  height / 2);
+
+        // Scale the drawing to the zoom level
+        transform.scale(lookingAt.getZ(), lookingAt.getZ());
         
-        // Determine the base scale. This is the scaling factor needed to fit
-        // the entire machine in the window.
-        double bedWidth = machineExtents.getX();
-        double bedHeight = machineExtents.getY();
-        double xScale = width / bedWidth;
-        double yScale = height / bedHeight;
-        double baseScale = Math.min(xScale, yScale);
-        double scale = baseScale * lookingAt.getZ();
-        // Scale the drawing by the baseScale times the zoomed scale
-        transform.scale(scale, scale);
         // Move to the lookingAt position
         transform.translate(-lookingAt.getX(), lookingAt.getY());
+        
         // Flip the drawing in Y so that our coordinate system matches that
         // of the machine.
         transform.scale(1,  -1);
@@ -127,6 +146,9 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
     protected void paintComponent(Graphics g) {
         // Create a new Graphics so we don't break the original.
         Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING, 
+                RenderingHints.VALUE_ANTIALIAS_ON);
         
         // Paint the background
         g2d.setColor(getBackground());
@@ -186,40 +208,7 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
             }
             
             for (Camera camera : head.getCameras()) {
-                Location location = camera.getLocation();
-                location = location.convertToUnits(LengthUnit.Millimeters);
-//                paintCrosshair(g2d, location, Color.blue);
-                BufferedImage img = cameraImages.get(camera);
-                if (img != null) {
-                    // we need to scale the image so that 1 pixel = 1mm
-                    // and it needs to be centered on the location
-                    double width = camera.getWidth();
-                    double height = camera.getHeight();
-                    Location upp = camera.getUnitsPerPixel().convertToUnits(LengthUnit.Millimeters);
-                    double scaledWidth = width * upp.getX();
-                    double scaledHeight = height * upp.getY();
-
-                    int dx1 = (int) (location.getX() - (scaledWidth / 2));
-                    int dy1 = (int) (location.getY() - (scaledHeight / 2));
-                    int dx2 = (int) (location.getX() + (scaledWidth / 2));
-                    int dy2 = (int) (location.getY() + (scaledHeight / 2));
-                    
-                    int sx1 = 0;
-                    int sy1 = 0;
-                    int sx2 = (int) width;
-                    int sy2 = (int) height;
-                    g2d.drawImage(
-                            img,
-                            dx1,
-                            dy1,
-                            dx2,
-                            dy2,
-                            sx1,
-                            sy1,
-                            sx2,
-                            sy2,
-                            null);
-                }
+                paintCamera(g2d, camera);
             }
             
             for (Actuator actuator : head.getActuators()) {
@@ -230,6 +219,72 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
         
         // Dispose of the Graphics we created.
         g2d.dispose();
+    }
+    
+    private void paintCamera(Graphics2D g2d, Camera camera) {
+        Location location = camera.getLocation();
+        location = location.convertToUnits(LengthUnit.Millimeters);
+//        paintCrosshair(g2d, location, Color.blue);
+        BufferedImage img = cameraImages.get(camera);
+        if (img == null) {
+            return;
+        }
+        
+        // we need to scale the image so that 1 pixel = 1mm
+        // and it needs to be centered on the location
+        double width = camera.getWidth();
+        double height = camera.getHeight();
+        Location upp = camera.getUnitsPerPixel().convertToUnits(LengthUnit.Millimeters);
+        double scaledWidth = width * upp.getX();
+        double scaledHeight = height * upp.getY();
+
+        int dx1 = (int) (location.getX() - (scaledWidth / 2));
+        int dy1 = (int) (location.getY() + (scaledHeight / 2));
+        int dx2 = (int) (location.getX() + (scaledWidth / 2));
+        int dy2 = (int) (location.getY() - (scaledHeight / 2));
+        
+        int sx1 = 0;
+        int sy1 = 0;
+        int sx2 = (int) width;
+        int sy2 = (int) height;
+        
+        if (dimCameras) {
+            if (img.getType() != BufferedImage.TYPE_INT_ARGB) {
+                img = OpenCvUtils.convertBufferedImage(
+                        img, 
+                        BufferedImage.TYPE_INT_ARGB);
+            }
+            Composite oldComp = g2d.getComposite();
+            AlphaComposite comp = AlphaComposite.getInstance(
+                    AlphaComposite.SRC_OVER, 
+                    0.1f);
+            g2d.setComposite(comp);
+            g2d.drawImage(
+                    img,
+                    dx1,
+                    dy1,
+                    dx2,
+                    dy2,
+                    sx1,
+                    sy1,
+                    sx2,
+                    sy2,
+                    null);
+            g2d.setComposite(oldComp);
+        }
+        else {
+            g2d.drawImage(
+                    img,
+                    dx1,
+                    dy1,
+                    dx2,
+                    dy2,
+                    sx1,
+                    sy1,
+                    sx2,
+                    sy2,
+                    null);
+        }
     }
     
     private void paintCrosshair(Graphics2D g2d, Location location, Color color) {
@@ -298,25 +353,33 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
     
     @Override
     public void mouseClicked(MouseEvent e) {
-        final Camera camera = Configuration.get().getMachine().getHeads().get(0).getCameras().get(0);
-        Location clickLocation = getPixelLocation(e.getX(), e.getY())
-                .convertToUnits(camera.getLocation().getUnits());
-        final Location location = camera.getLocation().derive(
-                clickLocation.getX(), 
-                clickLocation.getY(), 
-                null, 
-                null);
-        MainFrame.machineControlsPanel.submitMachineTask(new Runnable() {
-            public void run() {
-                try {
-                    MovableUtils.moveToLocationAtSafeZ(camera, location, 1.0);
+        if (e.isControlDown()) {
+            // jog
+            final Camera camera = Configuration.get().getMachine().getHeads().get(0).getCameras().get(0);
+            Location clickLocation = getPixelLocation(e.getX(), e.getY())
+                    .convertToUnits(camera.getLocation().getUnits());
+            final Location location = camera.getLocation().derive(
+                    clickLocation.getX(), 
+                    clickLocation.getY(), 
+                    null, 
+                    null);
+            MainFrame.machineControlsPanel.submitMachineTask(new Runnable() {
+                public void run() {
+                    try {
+                        MovableUtils.moveToLocationAtSafeZ(camera, location, 1.0);
+                    }
+                    catch (Exception e) {
+                        MessageBoxes.errorBox(getTopLevelAncestor(),
+                                "Move Error", e);
+                    }
                 }
-                catch (Exception e) {
-                    MessageBoxes.errorBox(getTopLevelAncestor(),
-                            "Move Error", e);
-                }
-            }
-        });
+            });
+        }
+        else {
+            // toggle camera dim
+            dimCameras = !dimCameras;
+            repaint();
+        }
     }
 
     @Override
@@ -335,6 +398,18 @@ public class NavigationView extends JComponent implements JobProcessorListener, 
     public void mouseExited(MouseEvent e) {
     }
     
+    @Override
+    public void keyTyped(KeyEvent e) {
+    }
+
+    @Override
+    public void keyPressed(KeyEvent e) {
+    }
+
+    @Override
+    public void keyReleased(KeyEvent e) {
+    }
+
     @Override
     public void jobLoaded(Job job) {
         repaint();
