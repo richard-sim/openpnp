@@ -2,14 +2,15 @@ package org.openpnp.gui.components;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;
-import java.awt.Composite;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.awt.geom.AffineTransform;
@@ -44,10 +45,17 @@ import org.openpnp.util.MovableUtils;
 import org.openpnp.util.OpenCvUtils;
 import org.openpnp.util.Utils2D;
 
+/**
+ * User interaction with this component:
+ *  Single click interacts with the object under the cursor.
+ *      Camera dims.
+ *  Drag jogs camera on release.
+ *  
+ */
 public class NavigationView 
     extends JComponent 
     implements JobProcessorListener, MachineListener, MouseWheelListener, 
-        MouseListener, KeyListener {
+        MouseListener, KeyListener, MouseMotionListener {
     // we need min and max so that we have limits, think of camera trying to go
     // to 0 on this machine. crashes.
     
@@ -69,7 +77,9 @@ public class NavigationView
 //    double baseScale = Math.min(xScale, yScale);
 //    double scale = baseScale * lookingAt.getZ();
     
-    private boolean dimCameras = false;
+    private double cameraOpacity = 1;
+    private Point dragStart = null;
+    private Point dragEnd = null;
     
     
     /**
@@ -86,6 +96,7 @@ public class NavigationView
         addMouseWheelListener(this);
         addMouseListener(this);
         addKeyListener(this);
+        addMouseMotionListener(this);
         Configuration.get().addListener(new ConfigurationListener() {
             @Override
             public void configurationLoaded(Configuration configuration)
@@ -158,6 +169,7 @@ public class NavigationView
         // are used for rendering must first be converted to mm.
         
         updateTransform();
+        AffineTransform origTx = g2d.getTransform();
         g2d.transform(transform);
         
         // Draw the bed
@@ -217,8 +229,35 @@ public class NavigationView
             }
         }
         
+        // Reset the transform for stuff we need to draw in pixel coordinate
+        // space.
+//        g2d.setTransform(origTx);
+        
+        paintDragVector(g2d);
+        
         // Dispose of the Graphics we created.
         g2d.dispose();
+    }
+    
+    private void paintDragVector(Graphics2D g2d) {
+        if (dragStart == null) {
+            return;
+        }
+        Camera camera = Configuration
+                .get()
+                .getMachine()
+                .getHeads()
+                .get(0)
+                .getCameras()
+                .get(0);
+        Location start = camera.getLocation().convertToUnits(LengthUnit.Millimeters);
+        Location end = getPixelLocation(dragEnd.getX(), dragEnd.getY());
+        g2d.setColor(Color.yellow);
+        g2d.drawLine(
+                (int) start.getX(), 
+                (int) start.getY(), 
+                (int) end.getX(), 
+                (int) end.getY());
     }
     
     private void paintCamera(Graphics2D g2d, Camera camera) {
@@ -248,18 +287,19 @@ public class NavigationView
         int sx2 = (int) width;
         int sy2 = (int) height;
         
-        if (dimCameras) {
+        if (cameraOpacity != 1) {
             if (img.getType() != BufferedImage.TYPE_INT_ARGB) {
                 img = OpenCvUtils.convertBufferedImage(
                         img, 
                         BufferedImage.TYPE_INT_ARGB);
             }
-            Composite oldComp = g2d.getComposite();
-            AlphaComposite comp = AlphaComposite.getInstance(
+            // We're going to mess with the composite, so we create a new
+            // context to draw with and dispose it when we're done.
+            Graphics2D g = (Graphics2D) g2d.create();
+            g.setComposite(AlphaComposite.getInstance(
                     AlphaComposite.SRC_OVER, 
-                    0.1f);
-            g2d.setComposite(comp);
-            g2d.drawImage(
+                    (float) cameraOpacity));
+            g.drawImage(
                     img,
                     dx1,
                     dy1,
@@ -270,7 +310,7 @@ public class NavigationView
                     sx2,
                     sy2,
                     null);
-            g2d.setComposite(oldComp);
+            g.dispose();
         }
         else {
             g2d.drawImage(
@@ -353,7 +393,26 @@ public class NavigationView
     
     @Override
     public void mouseClicked(MouseEvent e) {
-        if (e.isControlDown()) {
+        // find component that was clicked
+        // do something with it
+        
+        // for now just pretend they clicked a camera and toggle camera dim
+        if (cameraOpacity == 1) {
+            cameraOpacity = 0.25;
+        }
+        else {
+            cameraOpacity = 1;
+        }
+        repaint();
+    }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+        if (dragStart != null) {
             // jog
             final Camera camera = Configuration.get().getMachine().getHeads().get(0).getCameras().get(0);
             Location clickLocation = getPixelLocation(e.getX(), e.getY())
@@ -375,19 +434,8 @@ public class NavigationView
                 }
             });
         }
-        else {
-            // toggle camera dim
-            dimCameras = !dimCameras;
-            repaint();
-        }
-    }
-
-    @Override
-    public void mousePressed(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseReleased(MouseEvent e) {
+        dragStart = null;
+        dragEnd = null;
     }
 
     @Override
@@ -396,8 +444,24 @@ public class NavigationView
 
     @Override
     public void mouseExited(MouseEvent e) {
+        dragStart = null;
+        dragEnd = null;
+        repaint();
     }
     
+    @Override
+    public void mouseDragged(MouseEvent e) {
+        if (dragStart == null) {
+            dragStart = e.getPoint();
+        }
+        dragEnd = e.getPoint();
+        repaint();
+    }
+
+    @Override
+    public void mouseMoved(MouseEvent e) {
+    }
+
     @Override
     public void keyTyped(KeyEvent e) {
     }
