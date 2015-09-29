@@ -56,14 +56,11 @@ public class NavigationView
     extends JComponent 
     implements JobProcessorListener, MachineListener, MouseWheelListener, 
         MouseListener, KeyListener, MouseMotionListener {
-    // we need min and max so that we have limits, think of camera trying to go
-    // to 0 on this machine. crashes.
+    private Location machineExtentsBottomLeft = new Location(LengthUnit.Millimeters, 0, 0, 0, 0);
+    private Location machineExtentsTopRight = new Location(LengthUnit.Millimeters, 400, 400, 0, 0);
     
     // MUST always be in mm, if something sets it it should be converted first.
-    private Location machineExtents = new Location(LengthUnit.Millimeters, 430, 410, 0, 0);
-    
-    // MUST always be in mm, if something sets it it should be converted first.
-    private Location lookingAt = machineExtents.multiply(0.5, 0.5, 1, 1).derive(null, null, 1.0, null);
+    private Location lookingAt = new Location(LengthUnit.Millimeters, 0, 0, 1, 0);
     
     // Determine the base scale. This is the scaling factor needed to fit
     // the entire machine in the window.
@@ -169,12 +166,16 @@ public class NavigationView
         // are used for rendering must first be converted to mm.
         
         updateTransform();
-        AffineTransform origTx = g2d.getTransform();
         g2d.transform(transform);
         
         // Draw the bed
         g2d.setColor(Color.lightGray);
-        g2d.fillRect(0, 0, (int) machineExtents.getX(), (int) machineExtents.getY());
+        g2d.fillRect(
+                (int) machineExtentsBottomLeft.getX(), 
+                (int) machineExtentsBottomLeft.getY(), 
+                (int) (machineExtentsTopRight.getX() - machineExtentsBottomLeft.getX()), 
+                (int) (machineExtentsTopRight.getY() - machineExtentsBottomLeft.getY())
+                );
         
         Machine machine = Configuration.get().getMachine();
         JobProcessor jobProcessor = MainFrame.jobPanel.getJobProcessor();
@@ -208,15 +209,14 @@ public class NavigationView
         
         // Draw fixed cameras
         for (Camera camera : machine.getCameras()) {
-            Location location = camera.getLocation();
-            paintCrosshair(g2d, location, Color.cyan);
+            paintCamera(g2d, camera);
         }
          
         // Draw the head
         for (Head head : machine.getHeads()) {
             for (Nozzle nozzle : head.getNozzles()) {
                 Location location = nozzle.getLocation();
-//                paintCrosshair(g2d, location, Color.red);
+                paintCrosshair(g2d, location, Color.red);
             }
             
             for (Camera camera : head.getCameras()) {
@@ -225,13 +225,9 @@ public class NavigationView
             
             for (Actuator actuator : head.getActuators()) {
                 Location location = actuator.getLocation();
-//                paintCrosshair(g2d, location, Color.yellow);
+                paintCrosshair(g2d, location, Color.yellow);
             }
         }
-        
-        // Reset the transform for stuff we need to draw in pixel coordinate
-        // space.
-//        g2d.setTransform(origTx);
         
         paintDragVector(g2d);
         
@@ -382,9 +378,12 @@ public class NavigationView
         // If the user hit the minimum scale, center the table.
         // This helps them find it if it gets lost.
         if (scale == minimumScale) {
-            lookingAt = machineExtents
-                    .multiply(0.5, 0.5, 1, 1)
-                    .derive(null, null, minimumScale, null);
+            lookingAt = new Location(
+                    LengthUnit.Millimeters, 
+                    0, 
+                    0, 
+                    minimumScale, 
+                    0);
         }
         
         // Repaint will update the transform and we're ready to go.
