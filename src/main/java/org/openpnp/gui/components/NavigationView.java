@@ -4,8 +4,10 @@ import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Paint;
 import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.TexturePaint;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -15,9 +17,11 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 
+import javax.imageio.ImageIO;
 import javax.swing.JComponent;
 
 import org.openpnp.CameraListener;
@@ -77,6 +81,31 @@ public class NavigationView
     private double cameraOpacity = 1;
     private Point dragStart = null;
     private Point dragEnd = null;
+    private static Paint bedPaint;
+    private static BufferedImage noiseImage;
+    
+    static {
+        try {
+            noiseImage = ImageIO.read(ClassLoader.getSystemResource("noise-texture.png"));
+            bedPaint = createNoisyPaint(new Color(140, 140, 140));
+//            bedPaint = new Color(140, 140, 140);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private static Paint createNoisyPaint(Color color) {
+        int width = noiseImage.getWidth();
+        int height = noiseImage.getHeight();
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        g.setColor(color);
+        g.fillRect(0, 0, width, height);
+        g.drawImage(noiseImage, 0, 0, null);
+        g.dispose();
+        return new TexturePaint(image, new Rectangle2D.Double(0, 0, width, height));
+    }
     
     
     /**
@@ -169,7 +198,9 @@ public class NavigationView
         g2d.transform(transform);
         
         // Draw the bed
-        g2d.setColor(Color.lightGray);
+        // TODO: this, the crosshairs and a few other things would look a lot
+        // 
+        g2d.setPaint(bedPaint);
         g2d.fillRect(
                 (int) machineExtentsBottomLeft.getX(), 
                 (int) machineExtentsBottomLeft.getY(), 
