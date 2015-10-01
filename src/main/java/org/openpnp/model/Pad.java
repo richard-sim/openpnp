@@ -240,10 +240,7 @@ public abstract class Pad extends AbstractModelObject {
                     height,
                     width / 1.0 * roundness,
                     height / 1.0 * roundness);
-            AffineTransform tx = new AffineTransform();
-            tx.translate(location.getX(), -location.getY());
-            tx.rotate(Math.toRadians(-location.getRotation()));
-            return tx.createTransformedShape(shape);
+            return shape;
         }
     }    
 }

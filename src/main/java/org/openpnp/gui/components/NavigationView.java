@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.Paint;
 import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.TexturePaint;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
@@ -29,11 +30,14 @@ import org.openpnp.ConfigurationListener;
 import org.openpnp.JobProcessorListener;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
+import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
+import org.openpnp.model.Pad;
 import org.openpnp.model.Placement;
 import org.openpnp.spi.Actuator;
 import org.openpnp.spi.Camera;
@@ -45,6 +49,7 @@ import org.openpnp.spi.JobProcessor.JobState;
 import org.openpnp.spi.Machine;
 import org.openpnp.spi.MachineListener;
 import org.openpnp.spi.Nozzle;
+import org.openpnp.util.HslColor;
 import org.openpnp.util.MovableUtils;
 import org.openpnp.util.OpenCvUtils;
 import org.openpnp.util.Utils2D;
@@ -81,21 +86,21 @@ public class NavigationView
     private double cameraOpacity = 1;
     private Point dragStart = null;
     private Point dragEnd = null;
-    private static Paint bedPaint;
-    private static BufferedImage noiseImage;
-    
-    static {
-        try {
-            noiseImage = ImageIO.read(ClassLoader.getSystemResource("noise-texture.png"));
-            bedPaint = createNoisyPaint(new Color(140, 140, 140));
-//            bedPaint = new Color(140, 140, 140);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+    private Paint backgroundPaint = new Color(97, 98, 100);
+    private Paint bedPaint = createNoisyPaint(new Color(37, 37, 37));
+    private Paint boardPaint = new Color(29, 115, 25);
+    private Paint padPaint = new Color(168, 139, 9);
+    static BufferedImage noiseImage;
     
     private static Paint createNoisyPaint(Color color) {
+        if (noiseImage == null) {
+            try {
+                noiseImage = ImageIO.read(ClassLoader.getSystemResource("noise-texture.png"));
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
         int width = noiseImage.getWidth();
         int height = noiseImage.getHeight();
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -118,7 +123,6 @@ public class NavigationView
     private HashMap<Camera, BufferedImage> cameraImages = new HashMap<>();
     
     public NavigationView() {
-        setBackground(Color.black);
         addMouseWheelListener(this);
         addMouseListener(this);
         addKeyListener(this);
@@ -188,7 +192,7 @@ public class NavigationView
                 RenderingHints.VALUE_ANTIALIAS_ON);
         
         // Paint the background
-        g2d.setColor(getBackground());
+        g2d.setPaint(backgroundPaint);
         g2d.fillRect(0, 0, getWidth(), getHeight());
         
         // All rendering is done in mm, where 1mm = 1px. Any Locations that
@@ -198,8 +202,6 @@ public class NavigationView
         g2d.transform(transform);
         
         // Draw the bed
-        // TODO: this, the crosshairs and a few other things would look a lot
-        // 
         g2d.setPaint(bedPaint);
         g2d.fillRect(
                 (int) machineExtentsBottomLeft.getX(), 
@@ -207,6 +209,14 @@ public class NavigationView
                 (int) (machineExtentsTopRight.getX() - machineExtentsBottomLeft.getX()), 
                 (int) (machineExtentsTopRight.getY() - machineExtentsBottomLeft.getY())
                 );
+        g2d.setColor(Color.black);
+        g2d.drawRect(
+                (int) machineExtentsBottomLeft.getX(), 
+                (int) machineExtentsBottomLeft.getY(), 
+                (int) (machineExtentsTopRight.getX() - machineExtentsBottomLeft.getX()), 
+                (int) (machineExtentsTopRight.getY() - machineExtentsBottomLeft.getY())
+                );
+        
         
         Machine machine = Configuration.get().getMachine();
         JobProcessor jobProcessor = MainFrame.jobPanel.getJobProcessor();
@@ -214,16 +224,46 @@ public class NavigationView
         if (job != null) {
             // Draw the boards
             for (BoardLocation boardLocation : job.getBoardLocations()) {
-                Location location = boardLocation.getLocation();
-                paintCrosshair(g2d, location, Color.green);
+                Location location = boardLocation.getLocation().convertToUnits(LengthUnit.Millimeters);
+                
+                AffineTransform tx = g2d.getTransform();
+//                g2d.translate(location.getX(), location.getY());
+//                g2d.rotate(location.getRotation());
+                Board board = boardLocation.getBoard();
+                
+                Shape outline = board.getOutline().getShape();
+                // TODO: Generate bounds outline if null
+                if (outline != null) {
+                    g2d.setPaint(boardPaint);
+                    g2d.fill(outline);
+                }
+                
+                // Draw the pads on the boards
+                g2d.setPaint(padPaint);
+                for (Pad pad : board.getSolderPastePads()) {
+                    Shape shape = pad.getShape();
+                    AffineTransform shapeTx = new AffineTransform();
+                    Location padLoc = pad.getLocation().convertToUnits(LengthUnit.Millimeters);
+                    shapeTx.translate(padLoc.getX(), padLoc.getY());
+                    if (pad.getLocation().getUnits() != LengthUnit.Millimeters) {
+                        Length l = new Length(1, pad.getLocation().getUnits());
+                        l = l.convertToUnits(LengthUnit.Millimeters);
+                        shapeTx.scale(l.getValue(), l.getValue());
+                    }
+                    shape = shapeTx.createTransformedShape(shape);
+                    g2d.fill(shape);
+                }
+                
                 // Draw the placements on the boards
                 for (Placement placement : boardLocation.getBoard().getPlacements()) {
                     if (placement.getSide() != boardLocation.getSide()) {
                         continue;
                     }
                     Location placementLocation = Utils2D.calculateBoardPlacementLocation(boardLocation.getLocation(), boardLocation.getSide(), placement.getLocation());
-                    paintCrosshair(g2d, placementLocation, Color.magenta);
+//                    paintCrosshair(g2d, placementLocation, Color.orange);
                 }
+                
+                g2d.setTransform(tx);
             }
         }
         
@@ -355,12 +395,15 @@ public class NavigationView
     }
     
     private void paintCrosshair(Graphics2D g2d, Location location, Color color) {
+        Color color2 = new HslColor(color).getComplementary();
         location = location.convertToUnits(LengthUnit.Millimeters);
-        g2d.setColor(color);
         int x = (int) location.getX();
         int y = (int) location.getY();
+        g2d.setColor(color);
         g2d.drawLine(x - 3, y, x + 3, y);
-        g2d.drawLine(x, y - 3, x, y + 3);
+        g2d.drawLine(x, y - 3, x, y);
+        g2d.setColor(color2);
+        g2d.drawLine(x, y, x, y + 3);
     }
     
     private Location getPixelLocation(double x, double y) {

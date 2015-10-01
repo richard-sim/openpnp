@@ -27,7 +27,7 @@ public class Outline {
         }
         Path2D.Double shape = new Path2D.Double();
         for (Outline.OutlineElement element : elements) {
-            shape.append(element.getShape(), false);
+            shape.append(element.getShape(), true);
         }
         
         return shape;
@@ -61,9 +61,9 @@ public class Outline {
         public Shape getShape() {
             return new Line2D.Double(
                     x1,
-                    -y1,
+                    y1,
                     x2,
-                    -y2);
+                    y2);
         }
     }
     
