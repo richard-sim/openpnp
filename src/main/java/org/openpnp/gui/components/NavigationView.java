@@ -32,9 +32,9 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
+import org.openpnp.model.BoardPad;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
-import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.model.Pad;
@@ -50,8 +50,8 @@ import org.openpnp.spi.Machine;
 import org.openpnp.spi.MachineListener;
 import org.openpnp.spi.Nozzle;
 import org.openpnp.util.HslColor;
+import org.openpnp.util.ImageUtils;
 import org.openpnp.util.MovableUtils;
-import org.openpnp.util.OpenCvUtils;
 import org.openpnp.util.Utils2D;
 
 /**
@@ -240,16 +240,12 @@ public class NavigationView
                 
                 // Draw the pads on the boards
                 g2d.setPaint(padPaint);
-                for (Pad pad : board.getSolderPastePads()) {
+                for (BoardPad boardPad : board.getSolderPastePads()) {
+                    Location padLocation = boardPad.getLocation().convertToUnits(LengthUnit.Millimeters);
+                    Pad pad = boardPad.getPad().convertToUnits(LengthUnit.Millimeters);
                     Shape shape = pad.getShape();
                     AffineTransform shapeTx = new AffineTransform();
-                    Location padLoc = pad.getLocation().convertToUnits(LengthUnit.Millimeters);
-                    shapeTx.translate(padLoc.getX(), padLoc.getY());
-                    if (pad.getLocation().getUnits() != LengthUnit.Millimeters) {
-                        Length l = new Length(1, pad.getLocation().getUnits());
-                        l = l.convertToUnits(LengthUnit.Millimeters);
-                        shapeTx.scale(l.getValue(), l.getValue());
-                    }
+                    shapeTx.translate(padLocation.getX(), padLocation.getY());
                     shape = shapeTx.createTransformedShape(shape);
                     g2d.fill(shape);
                 }
@@ -330,7 +326,6 @@ public class NavigationView
     private void paintCamera(Graphics2D g2d, Camera camera) {
         Location location = camera.getLocation();
         location = location.convertToUnits(LengthUnit.Millimeters);
-//        paintCrosshair(g2d, location, Color.blue);
         BufferedImage img = cameraImages.get(camera);
         if (img == null) {
             return;
@@ -356,7 +351,7 @@ public class NavigationView
         
         if (cameraOpacity != 1) {
             if (img.getType() != BufferedImage.TYPE_INT_ARGB) {
-                img = OpenCvUtils.convertBufferedImage(
+                img = ImageUtils.convertBufferedImage(
                         img, 
                         BufferedImage.TYPE_INT_ARGB);
             }
