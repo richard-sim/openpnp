@@ -66,7 +66,7 @@ import javax.swing.border.TitledBorder;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.JobProcessorListener;
 import org.openpnp.gui.components.CameraPanel;
-import org.openpnp.gui.components.NavigationView;
+import org.openpnp.gui.components.FxNavigationView;
 import org.openpnp.gui.importer.BoardImporter;
 import org.openpnp.gui.importer.EagleBoardImporter;
 import org.openpnp.gui.importer.EagleMountsmdUlpImporter;
@@ -117,7 +117,7 @@ public class MainFrame extends JFrame {
 	public static CamerasPanel camerasPanel;
 	public static CameraPanel cameraPanel;
     public static MachineSetupPanel machineSetupPanel;
-    public static NavigationView navView;
+    public static FxNavigationView navView;
 
 	private JPanel contentPane;
 	private JLabel lblStatus;
@@ -169,7 +169,7 @@ public class MainFrame extends JFrame {
 		feedersPanel = new FeedersPanel(configuration, this);
 		camerasPanel = new CamerasPanel(this, configuration);
         machineSetupPanel = new MachineSetupPanel();
-        navView = new NavigationView();
+        navView = new FxNavigationView();
         cameraPanel = new CameraPanel();
         machineControlsPanel = new MachineControlsPanel(configuration, this,
                 cameraPanel);
