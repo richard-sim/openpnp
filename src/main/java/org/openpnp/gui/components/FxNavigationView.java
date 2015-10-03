@@ -1,14 +1,18 @@
 package org.openpnp.gui.components;
 
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
+import java.util.Map;
 
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.event.EventHandler;
+import javafx.geometry.Bounds;
 import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -27,9 +31,12 @@ import org.openpnp.spi.JobProcessor;
 import org.openpnp.spi.Machine;
 import org.openpnp.spi.MachineListener;
 
+@SuppressWarnings("serial")
 public class FxNavigationView extends JFXPanel {
     Location machineExtentsBottomLeft = new Location(LengthUnit.Millimeters, 0, 0, 0, 0);
     Location machineExtentsTopRight = new Location(LengthUnit.Millimeters, 400, 400, 0, 0);
+
+    Map<Camera, CameraImageView> cameraImageViews = new HashMap<>();
     
     Scene scene;
     Group root;
@@ -57,24 +64,39 @@ public class FxNavigationView extends JFXPanel {
         root.getChildren().add(machine);
         
         bed = new Group();
-        bed.getChildren().add(new Rectangle(400, 400, Color.GRAY));
+        Rectangle bedRect = new Rectangle(
+                machineExtentsBottomLeft.getX(),
+                machineExtentsBottomLeft.getY(),
+                machineExtentsTopRight.getX(),
+                machineExtentsTopRight.getY());
+        bedRect.setFill(Color.rgb(97, 98, 100));
+        bed.getChildren().add(bedRect);
         machine.getChildren().add(bed);
 
         boards = new Group();
         bed.getChildren().add(boards);
         
-        scene.setOnScroll(new EventHandler<ScrollEvent>() {
-            @Override
-            public void handle(final ScrollEvent e) {
-                double scale = machine.getScaleX();
-                scale += (e.getDeltaY() * 0.001);
-                scale = Math.max(scale, 0.1);
-                machine.setScaleX(scale);
-                machine.setScaleY(scale);
-            }
-        });
+        scene.setOnScroll(zoomHandler);
         return scene;
     }
+    
+    EventHandler<ScrollEvent> zoomHandler = new EventHandler<ScrollEvent>() {
+        @Override
+        public void handle(final ScrollEvent e) {
+            double scale = machine.getScaleX();
+            scale += (e.getDeltaY() * 0.0001);
+            scale = Math.max(scale, 0.1);
+            Bounds bounds1 = machine.getBoundsInParent();
+            machine.setScaleX(scale);
+            machine.setScaleY(scale);
+            Bounds bounds2 = machine.getBoundsInParent();
+            double deltaX = bounds2.getMinX() - bounds1.getMinX();
+            double deltaY = bounds2.getMinY() - bounds1.getMinY();
+            System.out.println(deltaX + ", " + deltaY);
+            machine.setTranslateX(e.getX());
+            machine.setTranslateY(e.getY());
+        }
+    };
     
     JobProcessorListener jobProcessorListener = new JobProcessorListener.Adapter() {
         @Override
@@ -108,26 +130,26 @@ public class FxNavigationView extends JFXPanel {
             for (JobProcessor jobProcessor : machine.getJobProcessors().values()) {
                 jobProcessor.addListener(jobProcessorListener);
             }
-//            for (Camera camera : machine.getCameras()) {
-//                camera.startContinuousCapture(
-//                        new NavCameraListener(camera), 
-//                        24);
-//            }
             Platform.runLater(new Runnable() {
                 public void run() {
+                    for (Camera camera : machine.getCameras()) {
+                        CameraImageView view = new CameraImageView(camera);
+                        cameraImageViews.put(camera, view);
+                        FxNavigationView
+                            .this
+                            .machine
+                            .getChildren()
+                            .add(view);
+                    }
                     for (Head head : machine.getHeads()) {
                         for (Camera camera : head.getCameras()) {
-                            final ImageView imageView = new ImageView();
-                            Location unitsPerPixel = camera.getUnitsPerPixel().convertToUnits(LengthUnit.Millimeters);
-                            imageView.setFitWidth(unitsPerPixel.getX() * camera.getWidth());
-                            imageView.setFitHeight(unitsPerPixel.getY() * camera.getHeight());
-                            FxNavigationView.this.machine.getChildren().add(imageView);
-                            camera.startContinuousCapture(new CameraListener() {
-                                @Override
-                                public void frameReceived(BufferedImage img) {
-                                    imageView.setImage(SwingFXUtils.toFXImage(img, null));
-                                }
-                            }, 10);
+                            CameraImageView view = new CameraImageView(camera);
+                            cameraImageViews.put(camera, view);
+                            FxNavigationView
+                                .this
+                                .machine
+                                .getChildren()
+                                .add(view);
                         }
                     }
                 }
@@ -138,7 +160,44 @@ public class FxNavigationView extends JFXPanel {
     MachineListener machineListener = new MachineListener.Adapter() {
         @Override
         public void machineHeadActivity(Machine machine, Head head) {
-            // TODO: Move the head, refresh movable cameras, etc.
+            // Reposition anything that might have moved.
+            for (Camera camera : head.getCameras()) {
+                final Location location = camera.getLocation().convertToUnits(LengthUnit.Millimeters);
+                final CameraImageView view = cameraImageViews.get(camera);
+                Platform.runLater(new Runnable() {
+                    public void run() {
+                        view.setX(location.getX());
+                        view.setY(location.getY());
+                    }
+                });
+            }
         }
     };
+    
+    class CameraImageView extends ImageView implements CameraListener {
+        final Camera camera;
+        
+        public CameraImageView(Camera camera) {
+            this.camera = camera;
+            Location unitsPerPixel = camera
+                    .getUnitsPerPixel()
+                    .convertToUnits(LengthUnit.Millimeters);
+            setFitWidth(unitsPerPixel.getX() * camera.getWidth());
+            setFitHeight(unitsPerPixel.getY() * camera.getHeight());
+            // Images are flipped with respect to display coordinates, so
+            // flip em back.
+            setScaleY(-1);
+            setOnMouseClicked(new EventHandler<MouseEvent>() {
+                @Override
+                public void handle(MouseEvent e) {
+                    setOpacity(getOpacity() == 1 ? 0.1 : 1);
+                }
+            });
+            camera.startContinuousCapture(this, 10);
+        }
+        
+        public void frameReceived(BufferedImage img) {
+            setImage(SwingFXUtils.toFXImage(img, null));
+        }
+    }
 }
