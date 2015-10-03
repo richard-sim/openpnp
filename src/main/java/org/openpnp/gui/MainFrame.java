@@ -48,6 +48,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -117,7 +118,7 @@ public class MainFrame extends JFrame {
 	public static CamerasPanel camerasPanel;
 	public static CameraPanel cameraPanel;
     public static MachineSetupPanel machineSetupPanel;
-    public static FxNavigationView navView;
+    public static JComponent navView;
 
 	private JPanel contentPane;
 	private JLabel lblStatus;

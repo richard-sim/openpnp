@@ -8,14 +8,17 @@ import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.event.EventHandler;
-import javafx.geometry.Bounds;
+import javafx.geometry.Point2D;
 import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.transform.Scale;
+import javafx.scene.transform.Translate;
 
 import org.openpnp.CameraListener;
 import org.openpnp.ConfigurationListener;
@@ -39,10 +42,13 @@ public class FxNavigationView extends JFXPanel {
     Map<Camera, CameraImageView> cameraImageViews = new HashMap<>();
     
     Scene scene;
-    Group root;
+    Pane root;
     Group machine;
     Group bed;
     Group boards;
+    
+    Scale zoomTx = new Scale(1, 1, 0, 0);
+    Translate viewTx = new Translate(100, 100);
 
     public FxNavigationView() {
         Platform.runLater(new Runnable() {
@@ -55,12 +61,14 @@ public class FxNavigationView extends JFXPanel {
     }
 
     private Scene createScene() {
-        root = new Group();
+        root = new Pane();
         // Flip Y so the coordinate system is that of OpenPnP
         root.setScaleY(-1);
         scene = new Scene(root, Color.BLACK);
         
         machine = new Group();
+        machine.getTransforms().add(zoomTx);
+        machine.getTransforms().add(viewTx);
         root.getChildren().add(machine);
         
         bed = new Group();
@@ -80,21 +88,24 @@ public class FxNavigationView extends JFXPanel {
         return scene;
     }
     
+    Point2D getPixelLocation(double x, double y) {
+        return machine.sceneToLocal(x, y);
+    }
+    
     EventHandler<ScrollEvent> zoomHandler = new EventHandler<ScrollEvent>() {
         @Override
         public void handle(final ScrollEvent e) {
-            double scale = machine.getScaleX();
-            scale += (e.getDeltaY() * 0.0001);
+            e.consume();
+            Point2D before = getPixelLocation(e.getX(), e.getY());
+            double scale = zoomTx.getX();
+            scale += (e.getDeltaY() * scale * 0.001);
             scale = Math.max(scale, 0.1);
-            Bounds bounds1 = machine.getBoundsInParent();
-            machine.setScaleX(scale);
-            machine.setScaleY(scale);
-            Bounds bounds2 = machine.getBoundsInParent();
-            double deltaX = bounds2.getMinX() - bounds1.getMinX();
-            double deltaY = bounds2.getMinY() - bounds1.getMinY();
-            System.out.println(deltaX + ", " + deltaY);
-            machine.setTranslateX(e.getX());
-            machine.setTranslateY(e.getY());
+            zoomTx.setX(scale);
+            zoomTx.setY(scale);
+            Point2D after = getPixelLocation(e.getX(), e.getY());
+            Point2D delta = after.subtract(before);
+            viewTx.setX(viewTx.getX() + delta.getX());
+            viewTx.setY(viewTx.getY() + delta.getY());
         }
     };
     
