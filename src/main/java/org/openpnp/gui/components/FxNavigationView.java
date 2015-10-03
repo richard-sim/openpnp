@@ -16,6 +16,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.transform.Scale;
 import javafx.scene.transform.Translate;
@@ -23,6 +24,7 @@ import javafx.scene.transform.Translate;
 import org.openpnp.CameraListener;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.JobProcessorListener;
+import org.openpnp.gui.MainFrame;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
@@ -46,6 +48,7 @@ public class FxNavigationView extends JFXPanel {
     Group machine;
     Group bed;
     Group boards;
+    Line jogTargetLine;
     
     Scale zoomTx = new Scale(1, 1, 0, 0);
     Translate viewTx = new Translate(100, 100);
@@ -85,24 +88,87 @@ public class FxNavigationView extends JFXPanel {
         bed.getChildren().add(boards);
         
         scene.setOnScroll(zoomHandler);
+        scene.setOnDragDetected(jogDragStartHandler);
+        scene.setOnMouseDragged(jogDragHandler);
+        scene.setOnMouseDragReleased(jogDragEndHandler);
         return scene;
     }
-    
-    Point2D getPixelLocation(double x, double y) {
-        return machine.sceneToLocal(x, y);
+
+    Camera getCamera() {
+        return Configuration
+                .get()
+                .getMachine()
+                .getHeads()
+                .get(0)
+                .getCameras()
+                .get(0);
     }
+
+    EventHandler<MouseEvent> jogDragStartHandler = new EventHandler<MouseEvent>() {
+        @Override
+        public void handle(MouseEvent e) {
+            scene.startFullDrag();
+            Camera camera = getCamera();
+            Location location = camera.getLocation().convertToUnits(LengthUnit.Millimeters);
+            Point2D start = machine.localToScene(location.getX(), location.getY());
+            start = root.sceneToLocal(start);
+            Point2D end = root.sceneToLocal(e.getX(), e.getY());
+            jogTargetLine = new Line(
+                    start.getX(), 
+                    start.getY(), 
+                    end.getX(), 
+                    end.getY());
+            jogTargetLine.setStroke(Color.WHITE);
+            root.getChildren().add(jogTargetLine);
+        }
+    };
+    
+    EventHandler<MouseEvent> jogDragHandler = new EventHandler<MouseEvent>() {
+        @Override
+        public void handle(MouseEvent e) {
+            if (jogTargetLine == null) {
+                return;
+            }
+            Point2D end = root.sceneToLocal(e.getX(), e.getY());
+            jogTargetLine.setEndX(end.getX());
+            jogTargetLine.setEndY(end.getY());
+        }
+    };
+    
+    EventHandler<MouseEvent> jogDragEndHandler = new EventHandler<MouseEvent>() {
+        @Override
+        public void handle(MouseEvent e) {
+            root.getChildren().remove(jogTargetLine);
+            final Camera camera = getCamera();
+            Point2D point = machine.sceneToLocal(e.getX(), e.getY());
+            final Location location = camera
+                    .getLocation()
+                    .derive(point.getX(), point.getY(), null, null);
+            MainFrame.machineControlsPanel.submitMachineTask(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        camera.moveTo(location, 1.0);
+                    }
+                    catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        }
+    };
     
     EventHandler<ScrollEvent> zoomHandler = new EventHandler<ScrollEvent>() {
         @Override
         public void handle(final ScrollEvent e) {
             e.consume();
-            Point2D before = getPixelLocation(e.getX(), e.getY());
+            Point2D before = machine.sceneToLocal(e.getX(), e.getY());
             double scale = zoomTx.getX();
             scale += (e.getDeltaY() * scale * 0.001);
             scale = Math.max(scale, 0.1);
             zoomTx.setX(scale);
             zoomTx.setY(scale);
-            Point2D after = getPixelLocation(e.getX(), e.getY());
+            Point2D after = machine.sceneToLocal(e.getX(), e.getY());
             Point2D delta = after.subtract(before);
             viewTx.setX(viewTx.getX() + delta.getX());
             viewTx.setY(viewTx.getY() + delta.getY());
@@ -193,11 +259,15 @@ public class FxNavigationView extends JFXPanel {
             Location unitsPerPixel = camera
                     .getUnitsPerPixel()
                     .convertToUnits(LengthUnit.Millimeters);
-            setFitWidth(unitsPerPixel.getX() * camera.getWidth());
-            setFitHeight(unitsPerPixel.getY() * camera.getHeight());
+            double width = unitsPerPixel.getX() * camera.getWidth();
+            double height = unitsPerPixel.getY() * camera.getHeight(); 
+            setFitWidth(width);
+            setFitHeight(height);
             // Images are flipped with respect to display coordinates, so
             // flip em back.
             setScaleY(-1);
+            setTranslateX(-width / 2);
+            setTranslateY(-height / 2);
             setOnMouseClicked(new EventHandler<MouseEvent>() {
                 @Override
                 public void handle(MouseEvent e) {
