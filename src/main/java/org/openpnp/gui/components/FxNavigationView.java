@@ -1,14 +1,19 @@
 package org.openpnp.gui.components;
 
+import java.awt.image.BufferedImage;
+
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.event.EventHandler;
 import javafx.scene.Group;
 import javafx.scene.Scene;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
+import org.openpnp.CameraListener;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.JobProcessorListener;
 import org.openpnp.model.BoardLocation;
@@ -16,6 +21,7 @@ import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
+import org.openpnp.spi.Camera;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.JobProcessor;
 import org.openpnp.spi.Machine;
@@ -93,7 +99,7 @@ public class FxNavigationView extends JFXPanel {
         @Override
         public void configurationComplete(Configuration configuration)
                 throws Exception {
-            Machine machine = configuration.getMachine();
+            final Machine machine = configuration.getMachine();
             machine.addListener(machineListener);
             // TODO: This doesn't really work in the new JobProcessor world
             // because the JobProcessor gets swapped out when changing tabs.
@@ -107,13 +113,25 @@ public class FxNavigationView extends JFXPanel {
 //                        new NavCameraListener(camera), 
 //                        24);
 //            }
-//            for (Head head : machine.getHeads()) {
-//                for (Camera camera : head.getCameras()) {
-//                    camera.startContinuousCapture(
-//                            new NavCameraListener(camera), 
-//                            24);
-//                }
-//            }
+            Platform.runLater(new Runnable() {
+                public void run() {
+                    for (Head head : machine.getHeads()) {
+                        for (Camera camera : head.getCameras()) {
+                            final ImageView imageView = new ImageView();
+                            Location unitsPerPixel = camera.getUnitsPerPixel().convertToUnits(LengthUnit.Millimeters);
+                            imageView.setFitWidth(unitsPerPixel.getX() * camera.getWidth());
+                            imageView.setFitHeight(unitsPerPixel.getY() * camera.getHeight());
+                            FxNavigationView.this.machine.getChildren().add(imageView);
+                            camera.startContinuousCapture(new CameraListener() {
+                                @Override
+                                public void frameReceived(BufferedImage img) {
+                                    imageView.setImage(SwingFXUtils.toFXImage(img, null));
+                                }
+                            }, 10);
+                        }
+                    }
+                }
+            });
         }
     };
     
