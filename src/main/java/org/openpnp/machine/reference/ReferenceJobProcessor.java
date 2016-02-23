@@ -42,6 +42,7 @@ import org.openpnp.spi.NozzleTip;
 import org.openpnp.spi.VisionProvider;
 import org.openpnp.spi.base.AbstractJobProcessor;
 import org.openpnp.util.Utils2D;
+import org.openpnp.vision.BottomVision;
 import org.openpnp.vision.FiducialLocator;
 import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Element;
@@ -71,6 +72,8 @@ public class ReferenceJobProcessor extends AbstractJobProcessor {
     
     @Element(required=false)
     private JobPlanner jobPlanner;
+    
+    private BottomVision bottomVision = new BottomVision();
     
 	public ReferenceJobProcessor() {
 	}
@@ -112,6 +115,20 @@ public class ReferenceJobProcessor extends AbstractJobProcessor {
 				return;
 			}
 		}
+		
+        fireDetailedStatusUpdated(String.format("Prepare bottom vision."));        
+        
+        if (!shouldJobProcessingContinue()) {
+            return;
+        }
+
+        try {
+            bottomVision.preProcess(job);
+        }
+        catch (Exception e) {
+            fireJobEncounteredError(JobError.MachineMovementError, e.getMessage());
+            return;
+        }
 		
         fireDetailedStatusUpdated(String.format("Check fiducials."));        
         
@@ -170,19 +187,27 @@ public class ReferenceJobProcessor extends AbstractJobProcessor {
                     return;
                 }
                 
-                Location bottomVisionOffsets;
-                try {
-                    bottomVisionOffsets = performBottomVision(machine, part, nozzle);
-                }
-                catch (Exception e) {
-                    fireJobEncounteredError(JobError.PartError, e.getMessage());
-                    return;
-                }
-                
                 Location placementLocation = placement.getLocation();
-                if (bottomVisionOffsets != null) {
-                    placementLocation = placementLocation.subtractWithRotation(bottomVisionOffsets);
-                }
+
+//                try {
+//                    bottomVision.findOffsets(part, nozzle);
+//                }
+//                catch (Exception e) {
+//                    e.printStackTrace();
+//                }
+                
+//                Location bottomVisionOffsets;
+//                try {
+//                    bottomVisionOffsets = performBottomVision(machine, part, nozzle);
+//                }
+//                catch (Exception e) {
+//                    fireJobEncounteredError(JobError.PartError, e.getMessage());
+//                    return;
+//                }
+//                if (bottomVisionOffsets != null) {
+//                    placementLocation = placementLocation.subtractWithRotation(bottomVisionOffsets);
+//                }
+                
                 placementLocation = 
                         Utils2D.calculateBoardPlacementLocation(
                         		bl, placementLocation);
@@ -338,34 +363,6 @@ public class ReferenceJobProcessor extends AbstractJobProcessor {
             boardLocation.setLocation(location);
         }
     }
-	
-	protected Location performBottomVision(Machine machine, Part part, Nozzle nozzle) throws Exception {
-	    // TODO: I think this stuff actually belongs in VisionProvider but
-	    // I have not yet fully thought through the API.
-	    
-	    // Find the first fixed camera
-	    if (machine.getCameras().isEmpty()) {
-	        // TODO: return null for now to indicate that no vision was
-	        // calculated. In the future we may want this to be based on
-	        // configuration.
-	        return null;
-	    }
-	    Camera camera = machine.getCameras().get(0);
-	    
-	    // Get it's vision provider
-	    VisionProvider vp = camera.getVisionProvider();
-	    if (vp == null) {
-            // TODO: return null for now to indicate that no vision was
-            // calculated. In the future we may want this to be based on
-            // configuration.
-            return null;
-	    }
-	    
-	    // Perform the operation. Note that similar to feeding and nozzle
-	    // tip changing, it is up to the VisionProvider to move the camera
-	    // and nozzle to where it needs to be.
-	    return vp.getPartBottomOffsets(part, nozzle);
-	}
 	
 	protected boolean changeNozzleTip(Nozzle nozzle, NozzleTip nozzleTip) {
         // NozzleTip Changer
