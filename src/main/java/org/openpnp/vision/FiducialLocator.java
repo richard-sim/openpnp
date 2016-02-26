@@ -8,6 +8,7 @@ import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -17,6 +18,7 @@ import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Footprint;
+import org.openpnp.model.Footprint.Pad;
 import org.openpnp.model.Length;
 import org.openpnp.model.Location;
 import org.openpnp.model.Part;
@@ -28,6 +30,7 @@ import org.openpnp.spi.VisionProvider.TemplateMatch;
 import org.openpnp.util.IdentifiableList;
 import org.openpnp.util.MovableUtils;
 import org.openpnp.util.Utils2D;
+import org.openpnp.util.VisionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,16 +103,6 @@ public class FiducialLocator {
         return location;
     }
     
-    public static Location getFiducialLocation(Footprint footprint, Camera camera) throws Exception {
-        // Create the template
-        BufferedImage template = createTemplate(camera.getUnitsPerPixel(), footprint);
-        
-        // Wait for camera to settle
-        Thread.sleep(camera.getSettleTimeMs());
-        // Perform vision operation
-        return getBestTemplateMatch(camera, template);
-    }
-    
     /**
      * Given a placement containing a fiducial, attempt to find the fiducial
      * using the vision system. The function first moves the camera to the
@@ -150,13 +143,10 @@ public class FiducialLocator {
         }
         
         if (footprint.getShape() == null) {
-        	throw new Exception(String.format("Package %s has an invalid or empty footprint.  See https://github.com/openpnp/openpnp/wiki/Fiducials",
-        			pkg.getId()));
+            throw new Exception(String.format("Package %s has an invalid or empty footprint.  See https://github.com/openpnp/openpnp/wiki/Fiducials",
+                    pkg.getId()));
         }
-        
-        // Create the template
-        BufferedImage template = createTemplate(camera.getUnitsPerPixel(), fid.getPart().getPackage().getFootprint());
-        
+
         // Move to where we expect to find the fid
         Location location = Utils2D.calculateBoardPlacementLocation(
         		boardLocation, fid.getLocation());
@@ -165,10 +155,12 @@ public class FiducialLocator {
 
         
         for (int i = 0; i < 3; i++) {
-            // Wait for camera to settle
-            Thread.sleep(camera.getSettleTimeMs());
             // Perform vision operation
-            location = getBestTemplateMatch(camera, template);
+            location = getFiducialLocationHoughCircles(footprint, camera);
+            if (location == null) {
+                logger.debug("No matches found with getFiducialLocationHoughCircles, falling back to getFiducialLocationTemplateMatch");
+                location = getFiducialLocationTemplateMatch(footprint, camera);
+            }
             if (location == null) {
                 logger.debug("No matches found!");
                 return null;
@@ -179,6 +171,44 @@ public class FiducialLocator {
         }
         
         return location;
+    }
+    
+    private static Location getFiducialLocationHoughCircles(Footprint footprint, Camera camera) throws Exception {
+        if (footprint.getPads().size() != 1) {
+            return null;
+        }
+        Pad pad = footprint.getPads().get(0);
+        if (pad.getRoundness() != 100.0) {
+            return null;
+        }
+        Length minDiameter = new Length(pad.getWidth(), footprint.getUnits()).multiply(0.75);
+        Length maxDiameter = new Length(pad.getWidth(), footprint.getUnits());
+        Length minDistance = new Length(pad.getWidth(), footprint.getUnits());
+        logger.debug("getFiducialLocationHoughCircles {}, {}, {}", new Object[] { minDiameter, maxDiameter, minDistance });
+        List<Location> circles = new ArrayList<>();
+        new FluentCv()
+            .setCamera(camera)
+            .settleAndCapture("original")
+            .toGray()
+            .blurGaussian(5)
+            .findCirclesHough(minDiameter, maxDiameter, minDistance)
+            .convertCirclesToLocations(circles);
+        logger.debug("Found {}", circles);
+        if (circles.isEmpty()) {
+            return null;
+        }
+        return circles.get(0);
+    }
+    
+    private static Location getFiducialLocationTemplateMatch(Footprint footprint, Camera camera) throws Exception {
+        // Create the template
+        BufferedImage template = createTemplate(camera.getUnitsPerPixel(), footprint);
+        
+        // Wait for camera to settle
+        Thread.sleep(camera.getSettleTimeMs());
+        
+        // Perform vision operation
+        return getBestTemplateMatch(camera, template);
     }
     
     private static Location getBestTemplateMatch(final Camera camera, BufferedImage template) throws Exception {
